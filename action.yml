@@ -1,0 +1,52 @@
+name: Android smoke test on a cloud phone
+description: Install your APK on a fresh Mobilebox cloud Android phone, open it, wait for a text, keep a screenshot. No emulator on the runner.
+author: Mobilebox
+branding:
+  icon: smartphone
+  color: blue
+inputs:
+  apk:
+    description: Path to the APK to test (arm64-v8a or universal).
+    required: true
+  wait-for:
+    description: Text that proves the app launched, e.g. a button label. Empty = pass when the app is in the foreground.
+    required: false
+    default: ''
+  api-key:
+    description: Your Mobilebox key. Pass it from a secret, e.g. secrets.MOBILESANDBOX_API_KEY.
+    required: true
+  timeout:
+    description: Seconds to wait for the text.
+    required: false
+    default: '60'
+  artifact-name:
+    description: Name of the screenshot artifact. Set it per job when you call the action more than once in a run.
+    required: false
+    default: android-smoke-screenshot
+outputs:
+  phone-id:
+    description: The phone the test ran on (deleted at the end).
+    value: ${{ steps.smoke.outputs.phone-id }}
+  screenshot:
+    description: Path to the PNG of the last screen.
+    value: ${{ steps.smoke.outputs.screenshot }}
+  result:
+    description: pass or fail.
+    value: ${{ steps.smoke.outputs.result }}
+runs:
+  using: composite
+  steps:
+    - id: smoke
+      shell: bash
+      run: node "$GITHUB_ACTION_PATH/smoke.mjs"
+      env:
+        APK: ${{ inputs.apk }}
+        WAIT_FOR: ${{ inputs.wait-for }}
+        TIMEOUT: ${{ inputs.timeout }}
+        MOBILESANDBOX_API_KEY: ${{ inputs.api-key }}
+    - if: always() && steps.smoke.outputs.screenshot != ''
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.smoke.outputs.screenshot }}
+        if-no-files-found: ignore
