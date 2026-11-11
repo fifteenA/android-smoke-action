@@ -1,11 +1,14 @@
-# Runs this action on a public F-Droid APK: once where the text shows, once where it can't.
+# Runs this action on a public F-Droid APK: once where the text shows, once where it can't. On a pull request the
+# passing run also posts its proof comment and edits it on later pushes (#184), with its own action-selftest key.
 name: test
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
+  pull-requests: write # the proof comment
 concurrency: test
 jobs:
   smoke:
@@ -21,7 +24,7 @@ jobs:
         with:
           apk: calculator.apk
           wait-for: '='
-          api-key: ${{ secrets.MOBILESANDBOX_API_KEY }}
+          api-key: ${{ secrets.MOBILESANDBOX_SELFTEST_KEY }}
       - id: fail
         uses: ./
         continue-on-error: true
@@ -29,10 +32,12 @@ jobs:
           apk: calculator.apk
           wait-for: Sign in
           timeout: 5
-          api-key: ${{ secrets.MOBILESANDBOX_API_KEY }}
+          api-key: ${{ secrets.MOBILESANDBOX_SELFTEST_KEY }}
           artifact-name: android-smoke-expected-fail
+          comment: false # the expected failure needs no comment
       - run: |
           echo "pass: ${{ steps.pass.outputs.result }} ${{ steps.pass.outputs.phone-id }} ${{ steps.pass.outputs.screenshot }}"
           echo "fail: ${{ steps.fail.outputs.result }} ${{ steps.fail.outputs.phone-id }}"
+          echo "comment: ${{ steps.pass.outputs.comment-url }}"
           test "${{ steps.pass.outputs.result }}" = pass
           test "${{ steps.fail.outputs.result }}" = fail
