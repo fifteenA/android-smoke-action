@@ -16,7 +16,7 @@ if (!apk) throw new Error('Set apk (path to the APK to test)')
 if (!(timeout > 0)) throw new Error(`timeout must be a positive number of seconds, got "${process.env.TIMEOUT}"`)
 const userAgent = `android-smoke-action/1 ${process.env.MOBILESANDBOX_USER_AGENT ?? ''}`.trim()
 const shots = join(process.env.RUNNER_TEMP ?? tmpdir(), 'android-smoke')
-const publish = process.env.PROOF !== 'false'
+const commentOnPr = process.env.COMMENT !== 'false'
 
 function output(name, value) {
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${value}\n`)
@@ -51,7 +51,6 @@ async function call(path, method = 'GET', body, headers = {}) {
 
 let id, app
 let ready = false
-let failure = ''
 let deleting
 function cleanup() { // runs once, whether from finally or a signal
   deleting ??= id ? call(`/v1/phones/${id}`, 'DELETE').then(() => console.log(`Deleted ${id}`)) : Promise.resolve()
@@ -103,14 +102,14 @@ try {
     } while (!result.results[0].ok && result.results[0].error?.code === 'wait_timeout' && Date.now() < until)
   }
   const bad = result.results.find(item => !item.ok)
-  if (bad?.error?.code === 'wait_timeout') failure = `"${waitFor}" did not appear within ${timeout} s`
-  else if (bad) failure = `${bad.error?.code ?? 'action_failed'}: ${bad.error?.message ?? ''}`
-  else if (!waitFor && result.screen.app !== app.package) failure = `${app.package} is not in the foreground (shows ${result.screen.app}): did it crash on launch?`
-  if (failure) throw new Error(`${failure}\nScreen:\n${result.screen.text}`)
+  if (bad?.error?.code === 'wait_timeout') throw new Error(`"${waitFor}" did not appear within ${timeout} s. Screen:\n${result.screen.text}`)
+  if (bad) throw new Error(`${JSON.stringify(bad.error)}\nScreen:\n${result.screen.text}`)
+  if (!waitFor && result.screen.app !== app.package) {
+    throw new Error(`${app.package} is not in the foreground (shows ${result.screen.app}): did it crash on launch?\nScreen:\n${result.screen.text}`)
+  }
   passed = true
   console.log(`Smoke passed in ${((Date.now() - started) / 1000).toFixed(1)} s: ${app.package} ${waitFor ? `shows "${waitFor}"` : 'is open'}`)
 } catch (error) {
-  failure ||= error.message.split('\n')[0]
   console.error(`Smoke failed: ${error.message}`) // the message carries the screen; a stack trace adds nothing
   process.exitCode = 1
 } finally {
@@ -125,7 +124,7 @@ try {
     } catch (error) {
       console.error('Screenshot failed:', error.message) // never hides the smoke result
     }
-    if (publish && app) await proof().catch(error => console.log(`Proof not published: ${error.message}`)) // never changes the verdict
+    if (commentOnPr && app) await proofComment().catch(error => console.log(`Proof not posted: ${error.message}`)) // never changes the verdict
   }
   try {
     await cleanup()
@@ -135,22 +134,10 @@ try {
   }
 }
 
-// The run's public proof (mobilebox.dev/proof/…, unlisted): what it checked, the steps, the last screen, time and cost.
-// The job summary always shows it; on a pull request it is one PR comment, updated on every push.
-async function proof() {
-  const title = `${app.package} ${waitFor ? `shows "${waitFor}"` : 'opens'}`.slice(0, 120)
-  const steps = [`Installed ${app.package} ${app.version_name ?? ''}`.trim(), 'Opened the app',
-    ...(failure ? [failure] : [waitFor ? `Saw "${waitFor}"` : 'The app stayed in the foreground'])]
-  const { url, markdown } = await call(`/v1/phones/${id}/proofs`, 'POST', { title, status: passed ? 'passed' : 'failed', steps })
-  output('proof-url', url)
-  console.log(`Proof: ${url}`)
-  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${markdown}\n`)
-  await comment(markdown)
-}
-
-// One comment per PR and artifact name, edited in place. Without a token that may write (fork PRs, read-only
-// permissions) it is skipped quietly: the proof is still in the job summary.
-async function comment(markdown) {
+// The run's proof as one PR comment per artifact name, edited on later pushes: one line, the last screen, our link.
+// Only on a pull request with comment: true; nothing is published otherwise. If the token cannot comment (fork PRs, no
+// pull-requests: write), the just-published proof is deleted again, so nothing is kept that nobody sees.
+async function proofComment() {
   const { GITHUB_EVENT_NAME: event, GITHUB_EVENT_PATH: eventPath, GITHUB_TOKEN: token, GITHUB_REPOSITORY: repo } = process.env
   if (!token || !repo || !eventPath || !['pull_request', 'pull_request_target'].includes(event)) return
   const number = JSON.parse(await readFile(eventPath, 'utf8')).pull_request?.number
@@ -160,11 +147,17 @@ async function comment(markdown) {
     method, body: body && JSON.stringify(body), signal: AbortSignal.timeout(30_000),
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': userAgent, 'X-GitHub-Api-Version': '2022-11-28' },
   })
+  const proof = await call(`/v1/phones/${id}/proofs`, 'POST', { title: `${app.package} launch`, status: passed ? 'passed' : 'failed' })
   const list = await github(`/repos/${repo}/issues/${number}/comments?per_page=100`)
   const existing = list.ok ? (await list.json()).find(c => c.body?.startsWith(marker)) : undefined
-  const body = { body: `${marker}\n${markdown}` }
+  const body = { body: `${marker}\n${proof.markdown}` }
   const sent = await (existing ? github(`/repos/${repo}/issues/comments/${existing.id}`, 'PATCH', body) : github(`/repos/${repo}/issues/${number}/comments`, 'POST', body))
-  if (sent.ok) console.log(`Proof ${existing ? 'updated on' : 'posted to'} PR #${number}`)
-  else if (sent.status === 403 || sent.status === 404) console.log('Proof not posted to the PR: this token cannot comment (add permissions: pull-requests: write)')
-  else console.log(`Proof not posted to the PR: GitHub answered ${sent.status}`)
+  if (sent.ok) {
+    output('comment-url', (await sent.json()).html_url ?? '')
+    return console.log(`Proof ${existing ? 'updated on' : 'posted to'} PR #${number}`)
+  }
+  await call(`/v1/proofs/${proof.id}`, 'DELETE').catch(() => {}) // its screenshots expire in 30 days anyway
+  console.log(sent.status === 403 || sent.status === 404
+    ? 'Proof not posted: this token cannot comment on the PR (add permissions: pull-requests: write)'
+    : `Proof not posted: GitHub answered ${sent.status}`)
 }
