@@ -16,6 +16,7 @@ if (!apk) throw new Error('Set apk (path to the APK to test)')
 if (!(timeout > 0)) throw new Error(`timeout must be a positive number of seconds, got "${process.env.TIMEOUT}"`)
 const userAgent = `android-smoke-action/1 ${process.env.MOBILESANDBOX_USER_AGENT ?? ''}`.trim()
 const shots = join(process.env.RUNNER_TEMP ?? tmpdir(), 'android-smoke')
+const commentOnPr = process.env.COMMENT !== 'false'
 
 function output(name, value) {
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${value}\n`)
@@ -48,7 +49,7 @@ async function call(path, method = 'GET', body, headers = {}) {
   return text ? JSON.parse(text) : null
 }
 
-let id
+let id, app
 let ready = false
 let deleting
 function cleanup() { // runs once, whether from finally or a signal
@@ -86,7 +87,7 @@ try {
   if (phone.status !== 'ready') throw new Error(`Phone not ready: ${JSON.stringify(phone)}`)
   ready = true
 
-  const app = await call(`/v1/phones/${id}/apps?grant_permissions=true`, 'POST', await readFile(apk))
+  app = await call(`/v1/phones/${id}/apps?grant_permissions=true`, 'POST', await readFile(apk))
   console.log(`Installed ${app.package} ${app.version_name ?? ''} on ${id}`)
   let result = await call(`/v1/phones/${id}/actions`, 'POST', { actions: [
     { type: 'open_app', package: app.package },
@@ -123,6 +124,7 @@ try {
     } catch (error) {
       console.error('Screenshot failed:', error.message) // never hides the smoke result
     }
+    if (commentOnPr && app) await proofComment().catch(error => console.log(`Proof not posted: ${error.message}`)) // never changes the verdict
   }
   try {
     await cleanup()
@@ -130,4 +132,32 @@ try {
     console.error(`Cleanup failed; delete ${id} from the dashboard:`, cleanupError)
     process.exitCode = 1
   }
+}
+
+// The run's proof as one PR comment per artifact name, edited on later pushes: one line, the last screen, our link.
+// Only on a pull request with comment: true; nothing is published otherwise. If the token cannot comment (fork PRs, no
+// pull-requests: write), the just-published proof is deleted again, so nothing is kept that nobody sees.
+async function proofComment() {
+  const { GITHUB_EVENT_NAME: event, GITHUB_EVENT_PATH: eventPath, GITHUB_TOKEN: token, GITHUB_REPOSITORY: repo } = process.env
+  if (!token || !repo || !eventPath || !['pull_request', 'pull_request_target'].includes(event)) return
+  const number = JSON.parse(await readFile(eventPath, 'utf8')).pull_request?.number
+  if (!number) return
+  const marker = `<!-- android-smoke-action:${process.env.ARTIFACT_NAME || 'android-smoke-screenshot'} -->`
+  const github = (path, method = 'GET', body) => fetch(`${process.env.GITHUB_API_URL ?? 'https://api.github.com'}${path}`, {
+    method, body: body && JSON.stringify(body), signal: AbortSignal.timeout(30_000),
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': userAgent, 'X-GitHub-Api-Version': '2022-11-28' },
+  })
+  const proof = await call(`/v1/phones/${id}/proofs`, 'POST', { title: `${app.package} launch`, status: passed ? 'passed' : 'failed' })
+  const list = await github(`/repos/${repo}/issues/${number}/comments?per_page=100`)
+  const existing = list.ok ? (await list.json()).find(c => c.body?.startsWith(marker)) : undefined
+  const body = { body: `${marker}\n${proof.markdown}` }
+  const sent = await (existing ? github(`/repos/${repo}/issues/comments/${existing.id}`, 'PATCH', body) : github(`/repos/${repo}/issues/${number}/comments`, 'POST', body))
+  if (sent.ok) {
+    output('comment-url', (await sent.json()).html_url ?? '')
+    return console.log(`Proof ${existing ? 'updated on' : 'posted to'} PR #${number}`)
+  }
+  await call(`/v1/proofs/${proof.id}`, 'DELETE').catch(() => {}) // its screenshots expire in 30 days anyway
+  console.log(sent.status === 403 || sent.status === 404
+    ? 'Proof not posted: this token cannot comment on the PR (add permissions: pull-requests: write)'
+    : `Proof not posted: GitHub answered ${sent.status}`)
 }

@@ -33,10 +33,12 @@
 name: android-smoke
 on:
   push:
-    branches: [main]   # not pull_request: GitHub withholds secrets from fork PRs
+    branches: [main]
+  pull_request:        # PRs from this repo; GitHub withholds secrets from fork PRs
   workflow_dispatch:
 permissions:
   contents: read
+  pull-requests: write # the proof comment on PRs; without it no comment is posted
 jobs:
   smoke:
     runs-on: ubuntu-latest
@@ -55,7 +57,13 @@ jobs:
           api-key: ${{ secrets.MOBILESANDBOX_API_KEY }}
 ```
 
-**3. Push.** The job fails when the text doesn't show, and the run's artifacts hold a screenshot of the screen the phone saw.
+**3. Push.** The job fails when the text doesn't show, and the run's artifacts hold a screenshot of the screen the phone saw. On a pull request the run leaves one comment, updated on every push:
+
+> ✅ com.example.app launch tested on a Mobilebox cloud phone · Android 14 · 23 s · $0.01<br>
+> *(the last screen)*<br>
+> Tested on Mobilebox
+
+The screenshot is an image file at an unguessable address on mobilebox.dev, not indexed and not shown anywhere else. It and the comment's line are deleted from Mobilebox after 30 days. Turn the comment off with `comment: false`: then nothing is posted or stored.
 
 <p align="center">
   <img src=".github/readme/screen.png" alt="The screenshot artifact from a passing run: Fossify Calculator open on a Mobilebox phone, showing 0 and the keypad" width="240">
@@ -70,13 +78,16 @@ jobs:
 | `api-key` | required | Your Mobilebox key, from a secret. |
 | `wait-for` | – | Text that proves launch, e.g. a button label. Empty: pass when the app is in the foreground after opening. |
 | `timeout` | `60` | Seconds to wait for the text. |
-| `artifact-name` | `android-smoke-screenshot` | Set it per call when one job calls the action twice. |
+| `comment` | `true` | On a pull request, post the run's proof as one PR comment. `false`: no comment, nothing stored. Push and other events never comment. |
+| `github-token` | `github.token` | Writes the PR comment; needs `pull-requests: write`. Without it no comment is posted (and nothing kept), and the job still passes or fails on the app alone. |
+| `artifact-name` | `android-smoke-screenshot` | Set it per call when one job calls the action twice; each name gets its own PR comment. |
 
 | Output | |
 |---|---|
 | `result` | `pass` or `fail` |
 | `phone-id` | The phone the test ran on, e.g. `ph_ohloqltzhm4c` |
 | `screenshot` | Path to the PNG of the last screen |
+| `comment-url` | The PR comment with the run's proof, when one was posted |
 
 Use `continue-on-error: true` and `steps.<id>.outputs.result` to report instead of failing the job.
 
@@ -86,7 +97,8 @@ Use `continue-on-error: true` and `steps.<id>.outputs.result` to report instead 
 2. Uploads your APK, installs it with its permissions granted, and opens it.
 3. Waits for `wait-for` on screen, or checks that the app is still in the foreground.
 4. Saves a screenshot and uploads it as an artifact, on a pass and on a fail.
-5. Deletes the phone: on a pass, on a fail, and when you cancel the job.
+5. On a pull request (unless `comment: false`), posts or updates the proof comment.
+6. Deletes the phone: on a pass, on a fail, and when you cancel the job.
 
 A lost create is retried with the same idempotency key, so a flaky network never makes a second phone.
 

@@ -19,6 +19,14 @@ inputs:
     description: Seconds to wait for the text.
     required: false
     default: '60'
+  comment:
+    description: On a pull request, post the run's proof as one PR comment (pass or fail, time, cost, the last screen). 'false' posts and stores nothing. Other events never comment.
+    required: false
+    default: 'true'
+  github-token:
+    description: Token for the PR comment; needs pull-requests write. Without it the comment is skipped.
+    required: false
+    default: ${{ github.token }}
   artifact-name:
     description: Name of the screenshot artifact. Set it per job when you call the action more than once in a run.
     required: false
@@ -33,6 +41,9 @@ outputs:
   result:
     description: pass or fail.
     value: ${{ steps.smoke.outputs.result }}
+  comment-url:
+    description: The PR comment with the run's proof (empty when none was posted).
+    value: ${{ steps.smoke.outputs.comment-url }}
 runs:
   using: composite
   steps:
@@ -44,6 +55,9 @@ runs:
         WAIT_FOR: ${{ inputs.wait-for }}
         TIMEOUT: ${{ inputs.timeout }}
         MOBILESANDBOX_API_KEY: ${{ inputs.api-key }}
+        COMMENT: ${{ inputs.comment }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        ARTIFACT_NAME: ${{ inputs.artifact-name }}
     - if: always() && steps.smoke.outputs.screenshot != ''
       uses: actions/upload-artifact@v7
       with:
