@@ -63,6 +63,8 @@ jobs:
 > *(the last screen)*<br>
 > Tested on Mobilebox
 
+A real one: [the proof comment on this repo's self-test PR](https://github.com/fifteenA/android-smoke-action/pull/2#issuecomment-6808386702).
+
 The screenshot is an image file at an unguessable address on mobilebox.dev, not indexed and not shown anywhere else. It and the comment's line are deleted from Mobilebox after 30 days. Turn the comment off with `comment: false`: then nothing is posted or stored.
 
 <p align="center">
