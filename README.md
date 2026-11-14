@@ -1,7 +1,7 @@
 <a href="https://mobilebox.dev">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/readme/banner-dark.png">
-    <img src=".github/readme/banner-light.png" alt="Mobilebox: mobile sandboxes for your AI agents" width="100%">
+    <img src=".github/readme/banner-light.png" alt="Mobilebox: Cloud phones for your agents" width="100%">
   </picture>
 </a>
 
@@ -11,8 +11,12 @@
   <a href="https://mobilebox.dev">Website</a> ·
   <a href="https://mobilebox.dev/docs">Docs</a> ·
   <a href="#usage">Usage</a> ·
-  <a href="https://github.com/fifteenA/mobilebox">Mobilebox for agents (MCP)</a>
+  <a href="https://mobilebox.dev/blog/screenshots-in-every-pull-request">Screenshots in every PR</a> ·
+  <a href="https://github.com/fifteenA/mobilebox">Mobilebox for agents (MCP)</a> ·
+  <a href="https://cursor.com/install-mcp?name=mobilebox&config=eyJ1cmwiOiJodHRwczovL21vYmlsZWJveC5kZXYvbWNwIn0%3D">Add to Cursor</a>
 </p>
+
+<p align="center"><sub><b>Mobilebox: Cloud phones for your agents.</b> Phones for your agents: each agent gets its own cloud Android phone over MCP, reads the screen, taps, types and installs your APK. Ready in ~20 s, $0.01/min, parked phones free.</sub></p>
 
 <p align="center">
   <a href="../../actions/workflows/test.yml"><img src="../../actions/workflows/test.yml/badge.svg" alt="test"></a>
