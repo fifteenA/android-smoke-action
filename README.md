@@ -12,7 +12,7 @@
   <a href="https://mobilebox.dev/docs">Docs</a> ·
   <a href="#usage">Usage</a> ·
   <a href="https://mobilebox.dev/blog/screenshots-in-every-pull-request">Screenshots in every PR</a> ·
-  <a href="https://github.com/fifteenA/mobilebox">Mobilebox for agents (MCP)</a> ·
+  <a href="https://github.com/mobilebox-dev/mobilebox">Mobilebox for agents (MCP)</a> ·
   <a href="https://cursor.com/install-mcp?name=mobilebox&config=eyJ1cmwiOiJodHRwczovL21vYmlsZWJveC5kZXYvbWNwIn0%3D">Add to Cursor</a>
 </p>
 
@@ -54,7 +54,7 @@ jobs:
           distribution: temurin
           java-version: 21
       - run: ./gradlew assembleDebug
-      - uses: fifteenA/android-smoke-action@v1
+      - uses: mobilebox-dev/android-smoke-action@v1
         with:
           apk: app/build/outputs/apk/debug/app-debug.apk
           wait-for: Welcome
@@ -67,7 +67,7 @@ jobs:
 > *(the last screen)*<br>
 > Tested on Mobilebox
 
-A real one: [the proof comment on this repo's self-test PR](https://github.com/fifteenA/android-smoke-action/pull/2#issuecomment-6808386702).
+A real one: [the proof comment on this repo's self-test PR](https://github.com/mobilebox-dev/android-smoke-action/pull/2#issuecomment-6808386702).
 
 The screenshot is an image file at an unguessable address on mobilebox.dev, not indexed and not shown anywhere else. It and the comment's line are deleted from Mobilebox after 30 days. Turn the comment off with `comment: false`: then nothing is posted or stored.
 
@@ -128,7 +128,7 @@ MOBILESANDBOX_API_KEY=... APK=app-debug.apk WAIT_FOR=Welcome node smoke.mjs
 
 ## Go further
 
-The same phones are open to your coding agent over MCP: it can tap through the flows a smoke test can't reach, read the screen as numbered elements and tell you what broke. See [fifteenA/mobilebox](https://github.com/fifteenA/mobilebox).
+The same phones are open to your coding agent over MCP: it can tap through the flows a smoke test can't reach, read the screen as numbered elements and tell you what broke. See [mobilebox-dev/mobilebox](https://github.com/mobilebox-dev/mobilebox).
 
 ---
 
